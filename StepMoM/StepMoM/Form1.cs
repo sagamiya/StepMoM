@@ -35,33 +35,6 @@ namespace StepMoM
         }
 
 
-        private void eval(float startValue, float stopValue, float stepValue)
-        {
-            if (System.IO.File.Exists(sourcePath.Text))
-            {
-                string targetDir = System.IO.Path.GetDirectoryName(sourcePath.Text) + "\\" + System.DateTime.Now.ToString("yyyymmdd-HHmmss");
-                System.IO.Directory.CreateDirectory(targetDir);
-                float value1 = startValue;
-                for (int i=0; (value1 = startValue + stepValue*i) <= stopValue; i++) {
-                    string targetPath = targetDir + "\\"
-                        + System.IO.Path.GetFileNameWithoutExtension(sourcePath.Text) + "-" + value1.ToString("e4") + ".omm";
-                    System.IO.StreamReader sr = new System.IO.StreamReader(sourcePath.Text);
-                    System.IO.StreamWriter sw = new System.IO.StreamWriter(targetPath);
-                    string tmp;
-                    while ((tmp = sr.ReadLine()) != null)
-                    {
-                        sw.WriteLine(tmp);
-                    }
-                    sr.Close();
-                    sw.Close();
-                    kickOmm(targetPath);
-                }
-            } else
-            {
-                statusArea.Text = statusArea.Text + "\r\nErr: File not found.";
-            }
-        }
-
         private void copyGeneratedFiles(string ommPath, string targetDir, string variable)
         {
             string tmp;
@@ -134,46 +107,63 @@ namespace StepMoM
             }
         }
 
-        private void eval2(float startValue, float stopValue, float stepValue)
+        private void evalInternal(int i, float value1, string targetDir)
+        {
+            string ommPath = System.IO.Path.GetTempFileName();
+            System.IO.StreamReader sr = new System.IO.StreamReader(sourcePath.Text);
+            System.IO.StreamWriter sw = new System.IO.StreamWriter(ommPath);
+            string line;
+            string statement;
+            Match mo;
+            while ((line = sr.ReadLine()) != null)
+            {
+                line = String.Format(line, value1);
+                while (true)
+                {
+                    mo = Regex.Match(line, "\"[^\"]*\"");
+                    if (mo.Success)
+                    {
+                        statement = line.Substring(mo.Index, mo.Length);
+                        System.Data.DataTable dt = new System.Data.DataTable();
+                        //line = line.Replace(mo.Value, statement.Substring(1, statement.Length - 2));
+                        //statusArea.Text = statusArea.Text + "\r\n" + statement;
+                        string result = (dt.Compute(statement.Substring(1, statement.Length - 2), "")).ToString();
+                        line = line.Replace(mo.Value, result.ToString());
+                        //statusArea.Text = statusArea.Text + "\r\n" + line;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                sw.WriteLine(line);
+            }
+            sr.Close();
+            sw.Close();
+            kickOmm(ommPath);
+            copyGeneratedFiles(ommPath, targetDir, " " + i.ToString() + " " + value1.ToString("e4"));
+        }
+
+
+    private void eval2(float startValue, float stopValue, float stepValue)
         {
             if (System.IO.File.Exists(sourcePath.Text))
             {
                 string targetDir = System.IO.Path.GetDirectoryName(sourcePath.Text) + "\\" + System.IO.Path.GetFileNameWithoutExtension(sourcePath.Text)+" "+System.DateTime.Now.ToString("yyyymmdd-HHmmss");
                 System.IO.Directory.CreateDirectory(targetDir);
                 float value1 = startValue;
-                for (int i = 0; (value1 = startValue + stepValue * i) <= stopValue; i++)
+                if (stepValue > 0.0)
                 {
-                    string ommPath = System.IO.Path.GetTempFileName();
-                    System.IO.StreamReader sr = new System.IO.StreamReader(sourcePath.Text);
-                    System.IO.StreamWriter sw = new System.IO.StreamWriter(ommPath);
-                    string line;
-                    string statement;
-                    Match mo;
-                    while ((line = sr.ReadLine()) != null)
+                    for (int i = 0; (value1 = startValue + stepValue * i) <= stopValue + 0.1 * stepValue; i++)
                     {
-                        line = String.Format(line, value1);
-                        while (true) {
-                            mo = Regex.Match(line, "\"[^\"]*\"");
-                            if (mo.Success)
-                            {
-                                statement = line.Substring(mo.Index, mo.Length);
-                                System.Data.DataTable dt = new System.Data.DataTable();
-                                //line = line.Replace(mo.Value, statement.Substring(1, statement.Length - 2));
-                                //statusArea.Text = statusArea.Text + "\r\n" + statement;
-                                string result = (dt.Compute(statement.Substring(1, statement.Length - 2), "")).ToString();
-                                line = line.Replace(mo.Value, result.ToString() );
-                                //statusArea.Text = statusArea.Text + "\r\n" + line;
-                            } else
-                            {
-                                break;
-                            }
-                        }
-                        sw.WriteLine(line);
+                        evalInternal(i, value1, targetDir);
                     }
-                    sr.Close();
-                    sw.Close();
-                    kickOmm(ommPath);
-                    copyGeneratedFiles(ommPath, targetDir, " "+i.ToString()+" " + value1.ToString("e4"));
+                } else if (stepValue < 0.0)
+                {
+                    for (int i = 0; (value1 = startValue + stepValue * i) >= stopValue + 0.1 * stepValue; i++)
+                    {
+                        evalInternal(i, value1, targetDir);
+                    }
                 }
             }
             else
