@@ -17,6 +17,11 @@ namespace StepMoM
         public Form1()
         {
             InitializeComponent();
+            string[] files = System.Environment.GetCommandLineArgs();
+            if (files.Length > 1)
+            {
+                sourcePath.Text = files[1];
+            }
         }
 
         private void kickOmm(string ommPath)
@@ -24,8 +29,9 @@ namespace StepMoM
             //ProcessStartInfoオブジェクトを作成する
             System.Diagnostics.ProcessStartInfo psi =
                 new System.Diagnostics.ProcessStartInfo();
+
             //起動するファイルのパスを指定する
-            psi.FileName = ".\\omm.exe";
+            psi.FileName = System.IO.Path.GetDirectoryName(System.Windows.Forms.Application.ExecutablePath) + "\\omm.exe";
             //コマンドライン引数を指定する
             psi.Arguments = ommPath;
 
@@ -34,6 +40,18 @@ namespace StepMoM
             p.WaitForExit();
         }
 
+        private void cleanLogFiles()
+        {
+            System.IO.File.Delete("current.log");
+            System.IO.File.Delete("element.log");
+            System.IO.File.Delete("ev2d.htm");
+            System.IO.File.Delete("far.log");
+            System.IO.File.Delete("geom3d.htm");
+            System.IO.File.Delete("near2d.log");
+            System.IO.File.Delete("omm.log");
+
+
+        }
 
         private void copyGeneratedFiles(string ommPath, string targetDir, string variable)
         {
@@ -83,10 +101,32 @@ namespace StepMoM
                 sr.Close();
                 sw.Close();
             }
+            if (System.IO.File.Exists("far.log"))
+            {
+                sr = new System.IO.StreamReader("far.log");
+                sw = new System.IO.StreamWriter(targetDir + "\\far " + variable + ".log");
+                while ((tmp = sr.ReadLine()) != null)
+                {
+                    sw.WriteLine(tmp);
+                }
+                sr.Close();
+                sw.Close();
+            }
             if (System.IO.File.Exists("geom3d.htm"))
             {
                 sr = new System.IO.StreamReader("geom3d.htm");
                 sw = new System.IO.StreamWriter(targetDir + "\\geom3d " + variable + ".htm");
+                while ((tmp = sr.ReadLine()) != null)
+                {
+                    sw.WriteLine(tmp);
+                }
+                sr.Close();
+                sw.Close();
+            }
+            if (System.IO.File.Exists("near2d.log"))
+            {
+                sr = new System.IO.StreamReader("near2d.log");
+                sw = new System.IO.StreamWriter(targetDir + "\\near2d " + variable + ".log");
                 while ((tmp = sr.ReadLine()) != null)
                 {
                     sw.WriteLine(tmp);
@@ -107,7 +147,7 @@ namespace StepMoM
             }
         }
 
-        private void evalInternal(int i, float value1, string targetDir)
+        private void evalInternal(int i, float value1, string targetDir, float v0, float v1, float v2)
         {
             string ommPath = System.IO.Path.GetTempFileName();
             System.IO.StreamReader sr = new System.IO.StreamReader(sourcePath.Text);
@@ -117,7 +157,7 @@ namespace StepMoM
             Match mo;
             while ((line = sr.ReadLine()) != null)
             {
-                line = String.Format(line, value1);
+                line = String.Format(line, v0, v1, v2);
                 while (true)
                 {
                     mo = Regex.Match(line, "\"[^\"]*\"");
@@ -145,24 +185,25 @@ namespace StepMoM
         }
 
 
-    private void eval2(float startValue, float stopValue, float stepValue)
+        private void eval2(float vFrom, float vTo, float vStep, float v0from, float v0step, float v1from, float v1step, float v2from, float v2step)
         {
             if (System.IO.File.Exists(sourcePath.Text))
             {
                 string targetDir = System.IO.Path.GetDirectoryName(sourcePath.Text) + "\\" + System.IO.Path.GetFileNameWithoutExtension(sourcePath.Text)+" "+System.DateTime.Now.ToString("yyyymmdd-HHmmss");
                 System.IO.Directory.CreateDirectory(targetDir);
-                float value1 = startValue;
-                if (stepValue > 0.0)
+                cleanLogFiles();
+                float value1 = vFrom;
+                if (vStep > 0.0)
                 {
-                    for (int i = 0; (value1 = startValue + stepValue * i) <= stopValue + 0.1 * stepValue; i++)
+                    for (int i = 0; (value1 = vFrom + vStep * i) <= vTo + 0.1 * vStep; i++)
                     {
-                        evalInternal(i, value1, targetDir);
+                        evalInternal(i, value1, targetDir, v0from+v0step*i, v1from+v1step*i, v2from+v2step*i);
                     }
-                } else if (stepValue < 0.0)
+                } else if (vStep < 0.0)
                 {
-                    for (int i = 0; (value1 = startValue + stepValue * i) >= stopValue + 0.1 * stepValue; i++)
+                    for (int i = 0; (value1 = vFrom + vStep * i) >= vTo + 0.1 * vStep; i++)
                     {
-                        evalInternal(i, value1, targetDir);
+                        evalInternal(i, value1, targetDir, v0from + v0step * i, v1from + v1step, v2from + v2step * i);
                     }
                 }
             }
@@ -174,13 +215,48 @@ namespace StepMoM
         private void startButton_Click(object sender, EventArgs e)
         {
             //eval2(0.024f, 0.026f, 0.001f);
-            float v0from, v0to, v0step;
-            v0from = float.Parse(variable0From.Text);
-            v0to = float.Parse(variable0to.Text);
-            v0step = float.Parse(variable0step.Text);
-            if (v0step != 0.0)
+            float vFrom, vTo, vStep;
+            float v0from, v0step;
+            float v1from, v1step;
+            float v2from, v2step;
+
+            vFrom = vTo = vStep = 0.0f;
+
+            v0from = float.Parse(boxV0from.Text);
+            if (radioButton1.Checked) {
+                vFrom = v0from;
+                vTo = float.Parse(boxV0to.Text);
+                vStep = v0step = float.Parse(boxV0step.Text);
+            } else
             {
-                eval2(v0from, v0to, v0step);
+                v0step = 0.0f;
+            }
+            v1from = float.Parse(boxV1from.Text);
+            if (radioButton2.Checked)
+            {
+                vFrom = v1from;
+                vTo = float.Parse(boxV1to.Text);
+                vStep = v1step = float.Parse(boxV1step.Text);
+            }
+            else
+            {
+                v1step = 0.0f;
+            }
+            v2from = float.Parse(boxV2from.Text);
+            if (radioButton3.Checked)
+            {
+                vFrom = v2from;
+                vTo = float.Parse(boxV2to.Text);
+                vStep = v2step = float.Parse(boxV2step.Text);
+            }
+            else
+            {
+                v2step = 0.0f;
+            }
+
+            if (vStep != 0.0)
+            {
+                eval2(vFrom, vTo, vStep, v0from, v0step, v1from, v1step, v2from, v2step);
             }
             statusArea.Text = statusArea.Text + "\r\nDone.";
         }
@@ -210,5 +286,34 @@ namespace StepMoM
 
         }
 
+        private void radioButton1_CheckedChanged(object sender, EventArgs e)
+        {
+            boxV0to.Enabled = true;
+            boxV0step.Enabled = true;
+            boxV1to.Enabled = false;
+            boxV1step.Enabled = false;
+            boxV2to.Enabled = false;
+            boxV2step.Enabled = false;
+        }
+
+        private void radioButton2_CheckedChanged(object sender, EventArgs e)
+        {
+            boxV1to.Enabled = true;
+            boxV1step.Enabled = true;
+            boxV0to.Enabled = false;
+            boxV0step.Enabled = false;
+            boxV2to.Enabled = false;
+            boxV2step.Enabled = false;
+        }
+
+        private void radioButton3_CheckedChanged(object sender, EventArgs e)
+        {
+            boxV0to.Enabled = false;
+            boxV0step.Enabled = false;
+            boxV1to.Enabled = false;
+            boxV1step.Enabled = false;
+            boxV2to.Enabled = true;
+            boxV2step.Enabled = true;
+        }
     }
 }
